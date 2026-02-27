@@ -1,0 +1,84 @@
+{
+  "info": {
+    "name": "PICPEC — Tests Locaux",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "http://localhost:3000" },
+    { "key": "TOKEN", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "🔧 TEST UTILS",
+      "item": [
+        { "name": "Reset BDD", "request": { "method": "POST", "url": "{{BASE_URL}}/api/test/reset" } },
+        { "name": "Créer utilisateurs", "request": { "method": "POST", "url": "{{BASE_URL}}/api/test/seed/users" } },
+        { "name": "Aide endpoints", "request": { "method": "GET", "url": "{{BASE_URL}}/api/test/help" } }
+      ]
+    },
+    {
+      "name": "🔐 AUTH",
+      "item": [
+        {
+          "name": "Login Alice (créatrice)",
+          "request": {
+            "method": "POST",
+            "url": "{{BASE_URL}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"alice@test.com\",\"password\":\"Test1234!\"}"
+            }
+          }
+        },
+        {
+          "name": "Login Bob",
+          "request": {
+            "method": "POST",
+            "url": "{{BASE_URL}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"bob@test.com\",\"password\":\"Test1234!\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🤝 TONTINES",
+      "item": [
+        { "name": "Créer tontine", "request": { "method": "POST", "url": "{{BASE_URL}}/api/tontines", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{TOKEN}}" }] } } },
+        { "name": "Lien invitation", "request": { "method": "GET", "url": "{{BASE_URL}}/api/tontines/:id/invitation-link" } },
+        { "name": "Rejoindre via token", "request": { "method": "POST", "url": "{{BASE_URL}}/api/tontines/join/:token" } },
+        { "name": "Mes tontines actives", "request": { "method": "GET", "url": "{{BASE_URL}}/api/tontines/me/active" } },
+        { "name": "Mes tontines en attente", "request": { "method": "GET", "url": "{{BASE_URL}}/api/tontines/me/pending" } },
+        { "name": "Historique", "request": { "method": "GET", "url": "{{BASE_URL}}/api/tontines/me/history" } }
+      ]
+    },
+    {
+      "name": "💳 PAIEMENTS",
+      "item": [
+        {
+          "name": "Initier paiement (mock)",
+          "request": {
+            "method": "POST",
+            "url": "{{BASE_URL}}/api/payments/initiate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"cotisationId\":\"...\",\"provider\":\"MTN_MOMO\",\"phone\":\"2250700000001\"}"
+            }
+          }
+        },
+        { "name": "Payer tout un cycle", "request": { "method": "POST", "url": "{{BASE_URL}}/api/test/pay-all/:cycleId" } },
+        { "name": "Consulter wallet", "request": { "method": "GET", "url": "{{BASE_URL}}/api/test/wallet/:userId" } }
+      ]
+    },
+    {
+      "name": "⏰ SIMULATION",
+      "item": [
+        { "name": "Expirer un cycle", "request": { "method": "POST", "url": "{{BASE_URL}}/api/test/expire-cycle/:cycleId" } },
+        { "name": "Déclencher pénalités", "request": { "method": "POST", "url": "{{BASE_URL}}/api/test/trigger/penalties" } },
+        { "name": "État tontine complet", "request": { "method": "GET", "url": "{{BASE_URL}}/api/test/tontine/:id" } }
+      ]
+    }
+  ]
+}

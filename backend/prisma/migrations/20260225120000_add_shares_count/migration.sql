@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "shares_count" INTEGER NOT NULL DEFAULT 0;

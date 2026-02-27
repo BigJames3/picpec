@@ -1,0 +1,532 @@
+// PICPEC - Prisma Schema
+// Plateforme Sociale-Fintech Africaine
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  USER
+}
+
+enum TontineStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAW
+  TRANSFER
+  TONTINE_PAYMENT
+  TONTINE_PAYOUT
+  PRODUCT_PURCHASE
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum TontineFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum FrequenceType {
+  JOURNALIER
+  HEBDOMADAIRE
+  MENSUEL
+  TRIMESTRIEL
+}
+
+enum MemberRole {
+  CREATOR
+  MEMBER
+}
+
+enum MemberStatus {
+  INVITED
+  ACTIVE
+  REMOVED
+}
+
+enum CotisationStatus {
+  PENDING
+  PAID
+  LATE
+  MISSING
+}
+
+enum CycleStatus {
+  OPEN
+  WAITING
+  DISBURSED
+  CANCELLED
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  OUT_OF_STOCK
+}
+
+enum DeliveryStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum NotificationType {
+  TONTINE_PAYMENT_DUE
+  TONTINE_PAYMENT_RECEIVED
+  TONTINE_TURN_WON
+  TONTINE_CYCLE_COMPLETE
+  WALLET_CREDIT
+  WALLET_DEBIT
+  MARKETPLACE_PURCHASE
+  MARKETPLACE_SALE
+  SYSTEM
+}
+
+model User {
+  id            String    @id @default(uuid())
+  fullname      String
+  email         String    @unique
+  phone         String?
+  passwordHash  String    @map("password_hash")
+  role          Role      @default(USER)
+  walletBalance Decimal   @default(0) @map("wallet_balance") @db.Decimal(15, 2)
+  avatarUrl     String?   @map("avatar_url")
+  isActive      Boolean   @default(true) @map("is_active")
+  refreshTokenHash String? @map("refresh_token_hash")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  refCode       String?   @unique @map("ref_code")
+  penaltyCredits Int     @default(0) @map("penalty_credits")
+  country       String?
+  city          String?
+  whatsapp      String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  posts         Post[]
+  comments      Comment[]
+  postsLiked    PostLike[]
+  tontinesCreated Tontine[] @relation("TontineCreator")
+  tontineMembers TontineMember[]
+  transactionsSent Transaction[] @relation("TransactionSender")
+  transactionsReceived Transaction[] @relation("TransactionReceiver")
+  products      Product[]
+  productsPurchased ProductPurchase[]
+  notifications Notification[]
+  referralsGiven Referral[] @relation("ReferralsGiven")
+  referralsReceived Referral[] @relation("ReferralsReceived")
+  pendingPayments PendingPayment[]
+  mockWallet MockWallet?
+  followersCount  Int      @default(0) @map("followers_count")
+  followingCount  Int      @default(0) @map("following_count")
+  followers       Follow[] @relation("UserFollowers")
+  following       Follow[] @relation("UserFollowing")
+  views           PostView[]
+  reports         Report[]
+
+  @@map("users")
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String   @map("follower_id")
+  followingId String   @map("following_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  follower  User @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+model Post {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  videoUrl      String?  @map("video_url")
+  hlsUrl        String?  @map("hls_url")
+  imageUrl      String?  @map("image_url")
+  mediaType     String?  @map("media_type")
+  thumbnailUrl  String?  @map("thumbnail_url")
+  duration      Float?   @map("duration")
+  description   String?
+  likesCount    Int      @default(0) @map("likes_count")
+  commentsCount Int      @default(0) @map("comments_count")
+  viewsCount    Int      @default(0) @map("views_count")
+  sharesCount   Int      @default(0) @map("shares_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  likes    PostLike[]
+  views    PostView[]
+  reports  Report[]
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("posts")
+}
+
+model PostView {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String?  @map("user_id")
+  watchedAt DateTime @default(now()) @map("watched_at")
+  duration  Int?
+
+  post Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("post_views")
+}
+
+model Report {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  reason    String
+  details   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("reports")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@map("comments")
+}
+
+model PostLike {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("post_likes")
+}
+
+model Tontine {
+  id               String         @id @default(uuid())
+  titre            String
+  description      String
+  montant          Float          // Cotisation par membre par cycle (FCFA)
+  nombreMembres    Int            @map("nombre_membres") // Nombre total de membres = nombre de tours
+  frequence        FrequenceType
+  tauxPenalite     Float          @default(0) @map("taux_penalite") // % du montant dû
+  dateDebut        DateTime       @map("date_debut") // Date du 1er cycle
+  invitationToken  String         @unique @default(uuid()) @map("invitation_token")
+  invitationActive Boolean        @default(true) @map("invitation_active")
+  status           TontineStatus  @default(PENDING)
+  currentCycle     Int            @default(0) @map("current_cycle")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  creatorId String @map("creator_id")
+  creator   User   @relation("TontineCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  members   TontineMember[]
+  cycles    TontineCycle[]
+  pendingPayments PendingPayment[]
+
+  @@index([status])
+  @@index([creatorId])
+  @@index([invitationToken])
+  @@map("tontines")
+}
+
+model TontineMember {
+  id        String       @id @default(uuid())
+  tontineId String       @map("tontine_id")
+  userId    String       @map("user_id")
+  role      MemberRole   @default(MEMBER)
+  status    MemberStatus @default(INVITED)
+  tourOrder Int?         @map("tour_order")
+  joinedAt  DateTime?    @map("joined_at")
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  tontine     Tontine      @relation(fields: [tontineId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cotisations Cotisation[]
+  cyclesBeneficiary TontineCycle[] @relation("CycleBeneficiary")
+
+  @@unique([tontineId, userId])
+  @@unique([tontineId, tourOrder])
+  @@index([tontineId])
+  @@index([userId])
+  @@map("tontine_members")
+}
+
+model TontineCycle {
+  id            String      @id @default(uuid())
+  tontineId     String      @map("tontine_id")
+  cycleNumber   Int         @map("cycle_number")
+  beneficiaryId String      @map("beneficiary_id")
+  dateDebut     DateTime    @map("date_debut")
+  dateFin       DateTime    @map("date_fin")
+  datePaiement  DateTime?   @map("date_paiement")
+  montantTotal  Float       @map("montant_total")
+  status        CycleStatus @default(OPEN)
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  tontine     Tontine       @relation(fields: [tontineId], references: [id], onDelete: Cascade)
+  beneficiary TontineMember @relation("CycleBeneficiary", fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  cotisations Cotisation[]
+
+  @@unique([tontineId, cycleNumber])
+  @@index([tontineId])
+  @@index([status])
+  @@map("tontine_cycles")
+}
+
+model Cotisation {
+  id             String           @id @default(uuid())
+  cycleId        String           @map("cycle_id")
+  memberId       String           @map("member_id")
+  montant        Float
+  penalite       Float            @default(0)
+  totalPaye      Float            @default(0) @map("total_paye")
+  status         CotisationStatus  @default(PENDING)
+  transactionId String?          @map("transaction_id")
+  provider       String?
+  paidAt         DateTime?       @map("paid_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  cycle TontineCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  member TontineMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, memberId])
+  @@index([cycleId])
+  @@index([memberId])
+  @@map("cotisations")
+}
+
+model Transaction {
+  id         String   @id @default(uuid())
+  senderId   String?  @map("sender_id")
+  receiverId String?  @map("receiver_id")
+  amount     Decimal  @db.Decimal(15, 2)
+  type       TransactionType
+  status     TransactionStatus @default(PENDING)
+  commission Decimal? @db.Decimal(10, 2)
+  reference  String?  @unique
+  note       String?
+  metadata   Json?    // Pour stocker ref tontine, product, etc.
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  sender   User?  @relation("TransactionSender", fields: [senderId], references: [id])
+  receiver User?  @relation("TransactionReceiver", fields: [receiverId], references: [id])
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+  @@index([type, status])
+  @@map("transactions")
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  emoji     String   @default("")
+  slug      String   @unique
+  country   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id         String   @id @default(uuid())
+  sellerId   String   @map("seller_id")
+  categoryId String?  @map("category_id")
+  name       String
+  description String?
+  price     Decimal  @db.Decimal(15, 2)
+  stock     Int      @default(0)
+  status    ProductStatus @default(ACTIVE)
+  imageUrl  String?  @map("image_url")
+  images    String[] @default([])
+  country   String?
+  city      String?
+  whatsapp  String?
+  isApproved  Boolean   @default(false)
+  approvedAt  DateTime?
+  approvedBy  String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  seller   User @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id])
+  purchases ProductPurchase[]
+
+  @@index([status])
+  @@index([sellerId])
+  @@index([categoryId])
+  @@index([country])
+  @@index([createdAt])
+  @@map("products")
+}
+
+model ProductPurchase {
+  id              String         @id @default(uuid())
+  productId       String         @map("product_id")
+  buyerId         String         @map("buyer_id")
+  quantity        Int
+  totalAmount     Decimal        @map("total_amount") @db.Decimal(15, 2)
+  status          TransactionStatus @default(PENDING)
+  deliveryStatus  DeliveryStatus @default(PENDING) @map("delivery_status")
+  shippingAddress String?        @map("shipping_address")
+  sellerNote      String?        @map("seller_note")
+  confirmedAt     DateTime?      @map("confirmed_at")
+  shippedAt       DateTime?      @map("shipped_at")
+  deliveredAt     DateTime?      @map("delivered_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  buyer   User     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@index([buyerId])
+  @@index([productId])
+  @@index([createdAt])
+  @@map("product_purchases")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  title     String
+  body      String
+  type      NotificationType
+  isRead    Boolean          @default(false) @map("is_read")
+  metadata  Json?
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+enum ReferralStatus {
+  PENDING
+  VALIDATED
+  EXPIRED
+}
+
+enum ReferralRewardType {
+  PENALTY_CREDIT
+  CASHBACK
+  NONE
+}
+
+model Referral {
+  id          String         @id @default(uuid())
+  referrerId  String         @map("referrer_id")
+  referredId  String         @map("referred_id")
+  tontineId   String?        @map("tontine_id")
+  status      ReferralStatus @default(PENDING)
+  rewardType  ReferralRewardType @default(PENALTY_CREDIT) @map("reward_type")
+  rewardValue Decimal        @default(1) @map("reward_value") @db.Decimal(10, 2)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  validatedAt DateTime?     @map("validated_at")
+  expiresAt   DateTime      @default(now()) @map("expires_at")
+
+  referrer User @relation("ReferralsGiven", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred User @relation("ReferralsReceived", fields: [referredId], references: [id], onDelete: Cascade)
+
+  @@index([referrerId])
+  @@index([referredId])
+  @@index([status])
+  @@map("referrals")
+}
+
+model PendingPayment {
+  id           String   @id @default(uuid())
+  reference    String   @unique
+  tontineId    String   @map("tontine_id")
+  userId       String   @map("user_id")
+  cotisationId String?  @map("cotisation_id")
+  cycleId      String   @map("cycle_id")
+  amount       Decimal  @db.Decimal(15, 2)
+  provider     String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tontine Tontine @relation(fields: [tontineId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([reference])
+  @@index([tontineId])
+  @@map("pending_payments")
+}
+
+// Wallet virtuel — utilisé uniquement en local/test
+model MockWallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  balance   Float    @default(100000)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions MockTransaction[]
+
+  @@map("mock_wallets")
+}
+
+model MockTransaction {
+  id          String   @id @default(cuid())
+  walletId    String   @map("wallet_id")
+  type        String
+  amount      Float
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  wallet MockWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@map("mock_transactions")
+}

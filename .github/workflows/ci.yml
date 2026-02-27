@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: picpec_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm install
+
+      - name: Prisma generate
+        working-directory: backend
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/picpec_test
+
+      - name: Lint backend
+        working-directory: backend
+        run: npm run lint
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/picpec_test
+          JWT_SECRET: ci-secret-min-32-chars-long-for-validation
+          JWT_REFRESH_SECRET: ci-refresh-secret-min-32-chars-for-validation
+
+      - name: Run backend tests
+        working-directory: backend
+        run: npm test
+
+  web-admin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install web-admin deps
+        working-directory: web-admin
+        run: npm install
+
+      - name: Lint web-admin
+        working-directory: web-admin
+        run: npm run lint
+
+      - name: Build web-admin
+        working-directory: web-admin
+        run: npm run build
+
+  mobile:
+    name: Mobile App
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - run: npm run typecheck

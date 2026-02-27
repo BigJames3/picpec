@@ -1,0 +1,72 @@
+{
+  "expo": {
+    "name": "PICPEC",
+    "slug": "picpec",
+    "scheme": "picpec",
+    "version": "1.0.0",
+    "jsEngine": "hermes",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Accès micro pour les vidéos"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Accès photos",
+          "cameraPermission": "Accès caméra pour enregistrer des photos et vidéos"
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Accès galerie",
+          "savePhotosPermission": "Sauvegarder des vidéos",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Autoriser PICPEC à accéder à la caméra pour scanner les QR codes"
+        }
+      ],
+      "expo-video",
+      "@react-native-community/datetimepicker"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#E85D04"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.picpec.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#E85D04"
+      },
+      "package": "com.picpec.app"
+    }
+  }
+}

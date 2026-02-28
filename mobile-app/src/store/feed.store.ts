@@ -29,8 +29,10 @@ export interface FeedState {
   isPaused: boolean;
   isScreenFocused: boolean;
   lastFetchAt: number;
+  precomputedStreamUrls: Record<string, string>;
 
   setActiveIndex: (index: number) => void;
+  setPrecomputedUrl: (postId: string, url: string) => void;
   setMuted: (muted: boolean) => void;
   togglePause: () => void;
   setScreenFocused: (focused: boolean) => void;
@@ -58,6 +60,7 @@ const initialState = {
   isPaused: false,
   isScreenFocused: true,
   lastFetchAt: 0,
+  precomputedStreamUrls: {} as Record<string, string>,
 };
 
 const initialHeartBurst = null as { x: number; y: number } | null;
@@ -75,12 +78,22 @@ export const useFeedStore = create<FeedState>((set, get) => ({
 
   setMuted: (muted) => set({ isMuted: muted }),
 
+  setPrecomputedUrl: (postId, url) =>
+    set((s) => ({
+      precomputedStreamUrls: {
+        ...s.precomputedStreamUrls,
+        [postId]: url,
+      },
+    })),
+
   togglePause: () => set((s) => ({ isPaused: !s.isPaused })),
 
   setScreenFocused: (focused) =>
     set({
       isScreenFocused: focused,
-      activeIndex: focused ? get().activeIndex : -1,
+      // Garder activeIndex intact
+      // GlobalVideoOverlay gère lui-même
+      // l'affichage selon isScreenFocused
     }),
 
   fetchFeed: async (cursor = null) => {
@@ -110,8 +123,22 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         limit: FEED_LIMIT,
       });
 
+      if (__DEV__ && isInitial && data.length > 0) {
+        console.log('[Feed] Premier post reçu:', data[0]?.id, data[0]?.createdAt);
+        console.log('[Feed] Nombre de posts:', data.length);
+      }
+
+      const sorted =
+        isInitial && data.length > 0
+          ? [...data].sort(
+              (a, b) =>
+                new Date(b.createdAt ?? 0).getTime() -
+                new Date(a.createdAt ?? 0).getTime(),
+            )
+          : data;
+
       set((s) => ({
-        posts: isInitial ? data : [...s.posts, ...data],
+        posts: isInitial ? sorted : [...s.posts, ...data],
         cursor: meta.nextCursor ?? null,
         hasMore: meta.hasMore ?? false,
         isLoading: false,
@@ -121,7 +148,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         isScreenFocused: isInitial ? true : s.isScreenFocused,
       }));
 
-      if (isInitial && data.length > 0) {
+      if (isInitial && sorted.length > 0) {
         get().preloadNext();
       }
     } catch (e) {
@@ -176,8 +203,10 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     set({
       ...initialState,
       heartBurst: initialHeartBurst,
-      isScreenFocused: false,
-      activeIndex: -1,
+      precomputedStreamUrls: {},
+      // NE PAS forcer isScreenFocused false ici
+      // NE PAS forcer activeIndex -1 ici
+      // Ce sera géré par setScreenFocused()
     });
   },
 
@@ -204,6 +233,11 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       hasMore: true,
       isLoading: true,
       isRefreshing: true,
+      activeIndex: 0,
+      isScreenFocused: true,
+      isPaused: false,
+      lastFetchAt: 0,
+      precomputedStreamUrls: {},
     });
     await get().fetchFeed(null);
   },

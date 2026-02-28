@@ -60,10 +60,10 @@ export default function HomeScreen() {
   const precomputedUrls = useRef<Map<string, string>>(new Map());
   const preloadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // TikTok-style: 85% visible pour détecter la vidéo active
+  // TikTok-style: 50% visible pour scroll plus réactif
   const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 85,
-    minimumViewTime: 100,
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 50,
   }).current;
 
   // Précalculer URL et préchauffer cache pour N posts suivants
@@ -82,6 +82,7 @@ export default function HomeScreen() {
         try {
           const result = await getAdaptiveVideoUrlForPost(videoUrl, hlsUrl);
           precomputedUrls.current.set(post.id, result.streamUrl);
+          useFeedStore.getState().setPrecomputedUrl(post.id, result.streamUrl);
 
           const delay = (i - 1) * 500;
           setTimeout(() => {
@@ -114,20 +115,23 @@ export default function HomeScreen() {
 
       setScreenFocused(true);
 
-      const { posts, lastFetchAt } = useFeedStore.getState();
-      const now = Date.now();
-      const isFreshCache =
-        posts.length > 0 && (now - (lastFetchAt ?? 0)) < 2000;
+      fetchFeed(null).then(() => {
+        setActiveIndex(0);
+        precomputedUrls.current.clear();
+        setTimeout(() => {
+          try {
+            flashListRef.current?.scrollToIndex({
+              index: 0,
+              animated: false,
+            });
+          } catch {
+            /* ignore si liste vide */
+          }
+        }, 500);
+      });
 
-      if (!isFreshCache) {
-        fetchFeed(null);
-      }
-
-      return () => {
-        setScreenFocused(false);
-        reset();
-      };
-    }, [isHydrated, accessToken, fetchFeed, setScreenFocused, reset]),
+      return () => setScreenFocused(false);
+    }, [isHydrated, accessToken, fetchFeed, setScreenFocused, setActiveIndex]),
   );
 
   useEffect(() => {
@@ -163,14 +167,16 @@ export default function HomeScreen() {
 
       const newIndex = mostVisible.index;
 
+      // Changer vidéo immédiatement
       setActiveIndex(newIndex);
 
+      // Précharger avec délai (pas urgent)
       if (preloadTimeoutRef.current) {
         clearTimeout(preloadTimeoutRef.current);
       }
       preloadTimeoutRef.current = setTimeout(() => {
         preloadNextPosts(newIndex);
-      }, 300);
+      }, 500);
     },
     [setActiveIndex, preloadNextPosts],
   );
@@ -193,8 +199,21 @@ export default function HomeScreen() {
   }, [hasMore, isLoading, cursor, fetchFeed]);
 
   const handleRefresh = useCallback(() => {
-    resetAndFetch();
-  }, [resetAndFetch]);
+    resetAndFetch().then(() => {
+      setActiveIndex(0);
+      precomputedUrls.current.clear();
+      setTimeout(() => {
+        try {
+          flashListRef.current?.scrollToIndex({
+            index: 0,
+            animated: false,
+          });
+        } catch {
+          /* ignore si liste vide */
+        }
+      }, 500);
+    });
+  }, [resetAndFetch, setActiveIndex]);
 
   if (isLoading && posts.length === 0) {
     return (
@@ -324,7 +343,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.35,
     shadowRadius: 4,
-    elevation: 6,
+    elevation: 50,   // ← dépasse tout overlay
+    zIndex: 50,      // ← ajouter
   },
   fabText: {
     color: '#fff',

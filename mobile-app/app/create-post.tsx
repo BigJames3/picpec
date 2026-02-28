@@ -199,9 +199,14 @@ export default function CreatePostScreen() {
       Alert.alert('✅ Publié !', 'Votre contenu est en ligne.', [
         {
           text: 'Voir le feed',
-          onPress: async () => {
-            const resetAndFetch = useFeedStore.getState().resetAndFetch;
-            await resetAndFetch();
+          onPress: () => {
+            // 1. Forcer lastFetchAt=0 pour que
+            //    useFocusEffect re-fetche
+            useFeedStore.getState().reset();
+
+            // 2. Naviguer immédiatement
+            //    useFocusEffect dans home.tsx
+            //    s'occupera du fetch
             router.replace('/(tabs)/home');
           },
         },

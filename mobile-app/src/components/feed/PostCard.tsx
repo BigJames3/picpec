@@ -25,7 +25,6 @@ import { useFeedStore } from '../../store/feed.store';
 import { useAuthStore } from '../../store/auth.store';
 import { getWebPImageUrl } from '../../utils/cloudinary.utils';
 import { postsApi } from '../../api/posts.api';
-import { formatCount } from '../../utils/formatCount';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -245,8 +244,8 @@ const PostCardComponent = ({ post, index }: Props) => {
             </View>
           )}
 
-          {/* Indicateur pause au centre — vidéo uniquement */}
-          {hasVideo && isPausedVisible && (
+          {/* Indicateur pause au centre */}
+          {isPausedVisible && (
             <Animated.View
               style={[styles.pauseIndicator, { opacity: pauseOpacity }]}
               pointerEvents="none"
@@ -279,7 +278,17 @@ const PostCardComponent = ({ post, index }: Props) => {
       <View style={styles.sideActions}>
         {/* Avatar utilisateur */}
         <View style={styles.avatarWrapper}>
-          <Image source={{ uri: avatarUri }} style={styles.avatar} />
+          <Image
+            source={{
+              uri:
+                post.user?.avatarUrl ??
+                post.user?.avatar ??
+                `https://ui-avatars.com/api/?name=${
+                  encodeURIComponent(authorName)
+                }&background=E85D04&color=fff`,
+            }}
+            style={styles.avatar}
+          />
           {currentUserId && post.user?.id !== currentUserId && (
             <TouchableOpacity
               style={[styles.followBadge, isFollowing && styles.followBadgeActive]}
@@ -309,7 +318,9 @@ const PostCardComponent = ({ post, index }: Props) => {
               color={isLiked ? '#ff2d55' : '#fff'}
             />
           </Animated.View>
-          <Text style={styles.actionCount}>{formatCount(likes)}</Text>
+          <Text style={styles.actionCount}>
+            {likes > 999 ? `${(likes / 1000).toFixed(1)}k` : likes}
+          </Text>
         </TouchableOpacity>
 
         {/* Commentaire */}
@@ -324,7 +335,7 @@ const PostCardComponent = ({ post, index }: Props) => {
             color="#fff"
           />
           <Text style={styles.actionCount}>
-            {formatCount(post.commentsCount ?? 0)}
+            {post.commentsCount ?? 0}
           </Text>
         </TouchableOpacity>
 
@@ -335,7 +346,7 @@ const PostCardComponent = ({ post, index }: Props) => {
           activeOpacity={0.8}
         >
           <Ionicons name="arrow-redo-outline" size={32} color="#fff" />
-          <Text style={styles.actionCount}>{formatCount(sharesCount)}</Text>
+          <Text style={styles.actionCount}>Partager</Text>
         </TouchableOpacity>
 
         {/* Mute — repositionné en bas de la colonne */}
@@ -358,10 +369,14 @@ const PostCardComponent = ({ post, index }: Props) => {
       <View style={styles.bottomInfo}>
         {/* Nom utilisateur */}
         <TouchableOpacity
-          onPress={() => router.push(`/users/${post.user?.id}` as never)}
+          onPress={() =>
+          router.push(`/users/${post.user?.id}` as never)
+        }
           activeOpacity={0.8}
         >
-          <Text style={styles.username}>@{authorHandle}</Text>
+          <Text style={styles.username}>
+          @{authorHandle}
+        </Text>
         </TouchableOpacity>
 
         {/* Description */}
@@ -389,7 +404,7 @@ const PostCardComponent = ({ post, index }: Props) => {
         {/* Musique / type de média */}
         <View style={styles.mediaTypeRow}>
           <Ionicons
-            name={hasVideo ? 'musical-notes' : 'image-outline'}
+            name={hasVideo ? 'musical-notes' : 'image'}
             size={12}
             color="rgba(255,255,255,0.7)"
           />
@@ -467,7 +482,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -8,
     left: '50%',
-    marginLeft: -10,
+    transform: [{ translateX: -10 }],
     width: 20,
     height: 20,
     borderRadius: 10,

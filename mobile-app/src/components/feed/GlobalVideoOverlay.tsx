@@ -13,6 +13,7 @@ import {
   Text,
   Animated,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useFeedStore, useActivePost } from '../../store/feed.store';
 import { postsApi } from '../../api/posts.api';
@@ -31,7 +32,9 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export function GlobalVideoOverlay() {
   const activePost = useActivePost();
+  const precomputedStreamUrls = useFeedStore((s) => s.precomputedStreamUrls);
   const isMuted = useFeedStore((s) => s.isMuted);
+  const setMuted = useFeedStore((s) => s.setMuted);
   const isPaused = useFeedStore((s) => s.isPaused);
   const isScreenFocused = useFeedStore((s) => s.isScreenFocused);
   const updatePostLiked = useFeedStore((s) => s.updatePostLiked);
@@ -39,6 +42,8 @@ export function GlobalVideoOverlay() {
   const loadStartedAt = useRef<number>(0);
   const thumbnailOpacity = useRef(new Animated.Value(1)).current;
   const videoOpacity = useRef(new Animated.Value(0)).current;
+  const lastPlayedRef = useRef('');
+  const viewedPostsRef = useRef<Set<string>>(new Set());
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -68,14 +73,21 @@ export function GlobalVideoOverlay() {
     }
   }, [activePost?.id, activePost?.isLiked, activePost?.likesCount, activePost?.isFollowing]);
 
-  // Résoudre streamUrl quand activePost change
+  // Résoudre streamUrl quand activePost change — préférer URL précalculée si dispo
   useEffect(() => {
     if (!hasVideo || !activePost) {
       setStreamUrl('');
       return;
     }
 
-    const hls = activePost.hlsUrl  ?? null;
+    const precomputed = precomputedStreamUrls[activePost.id];
+    if (precomputed && (precomputed.startsWith('http') || precomputed.includes('/'))) {
+      setStreamUrl(precomputed);
+      if (__DEV__) console.log('[GlobalOverlay] 📦 URL précalculée:', precomputed.slice(-40));
+      return;
+    }
+
+    const hls = activePost.hlsUrl ?? null;
     const mp4 = activePost.videoUrl ?? null;
 
     if (!hls && !mp4) {
@@ -99,9 +111,7 @@ export function GlobalVideoOverlay() {
     }
 
     if (finalUri) setStreamUrl(finalUri);
-
-  }, [hasVideo, activePost?.id,
-      activePost?.hlsUrl, activePost?.videoUrl]);
+  }, [hasVideo, activePost?.id, activePost?.hlsUrl, activePost?.videoUrl, precomputedStreamUrls]);
 
   useEffect(() => {
     if (__DEV__) {
@@ -116,7 +126,7 @@ export function GlobalVideoOverlay() {
     }
   }, [activePost?.id, activePost?.hlsUrl, activePost?.videoUrl, activePost?.mediaType, isScreenFocused, streamUrl]);
 
-  const replaceAndPlay = useCallback(async () => {
+  const replaceAndPlay = useCallback(() => {
     if (!player || !streamUrl) return;
 
     loadStartedAt.current = Date.now();
@@ -125,53 +135,70 @@ export function GlobalVideoOverlay() {
     setCurrentTime(0);
     setDuration(0);
 
-    const replacePlayer = player as unknown as {
-      replaceAsync: (s: { uri: string }) => Promise<void>;
-    };
-
     try {
       if (__DEV__) {
         console.log('[GlobalOverlay] replaceAndPlay:', streamUrl.slice(-50));
       }
-      await replacePlayer.replaceAsync({ uri: streamUrl });
 
-      player.muted = isMuted;
-      if (!isPaused) {
-        player.play();
-        if (__DEV__) console.log('[GlobalOverlay] ▶️ Lecture démarrée');
+      // API correcte expo-video — replace() synchrone, pas de délai
+      player.replace({ uri: streamUrl });
+      try {
+        player.muted = isMuted;
+        if (!isPaused) {
+          player.play();
+          if (__DEV__) console.log('[GlobalOverlay] ▶️ Lecture démarrée');
+        }
+      } catch {
+        /* ignore */
       }
     } catch (err) {
-      if (__DEV__) console.warn('[GlobalOverlay] Erreur replaceAndPlay:', err);
-      onError(activePost?.id ?? '', err instanceof Error ? err.message : String(err));
-      setTimeout(() => {
-        try {
-          if (!isPaused && player) {
-            player.play();
-          }
-        } catch {
-          /* ignore */
-        }
-      }, 200);
+      if (__DEV__) console.warn('[GlobalOverlay] Erreur replace:', err);
+      onError(
+        activePost?.id ?? '',
+        err instanceof Error ? err.message : String(err),
+      );
     }
   }, [player, streamUrl, isMuted, isPaused, thumbnailOpacity, videoOpacity, activePost?.id]);
+
+  const replaceAndPlayRef = useRef(replaceAndPlay);
+  replaceAndPlayRef.current = replaceAndPlay;
 
   useEffect(() => {
     if (!isScreenFocused || !hasVideo || !streamUrl) {
       try {
         player?.pause();
-        player.muted = true;
+        if (player) player.muted = true;
       } catch {
         /* ignore */
       }
+      lastPlayedRef.current = '';
       return;
     }
 
+    // Guard: URL complète uniquement (évite double appel streamUrl vide → rempli)
+    if (!streamUrl.startsWith('http') && !streamUrl.includes('/')) return;
+
+    // Éviter de rejouer la même URL en boucle
+    const playKey = `${activePost?.id ?? ''}-${streamUrl}`;
+    if (lastPlayedRef.current === playKey) return;
+    lastPlayedRef.current = playKey;
+
+    replaceAndPlayRef.current();
+  }, [isScreenFocused, hasVideo, activePost?.id, streamUrl]);
+
+  // Dédupliquer les appels /view
+  useEffect(() => {
+    if (!activePost?.id || !isScreenFocused) return;
+
+    if (viewedPostsRef.current.has(activePost.id)) return;
+    viewedPostsRef.current.add(activePost.id);
+
     const timer = setTimeout(() => {
-      replaceAndPlay();
-    }, 150);
+      postsApi.recordView(activePost.id).catch(() => {});
+    }, 1000);
 
     return () => clearTimeout(timer);
-  }, [isScreenFocused, hasVideo, activePost?.id, streamUrl, replaceAndPlay]);
+  }, [activePost?.id, isScreenFocused]);
 
   useEffect(() => {
     if (!player || !hasVideo) return;
@@ -361,7 +388,18 @@ export function GlobalVideoOverlay() {
       )}
 
       {activePost && (
-        <>
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 20,
+            elevation: 20,
+          }}
+          pointerEvents="box-none"
+        >
           <VideoOverlayLeft post={activePost} />
           <SideButtons
             postId={activePost.id}
@@ -384,8 +422,10 @@ export function GlobalVideoOverlay() {
             onLike={handleLike}
             onFollow={handleFollow}
             followLoading={followLoading}
+            isMuted={isMuted}
+            onMuteToggle={() => setMuted(!isMuted)}
           />
-        </>
+        </View>
       )}
     </View>
   );

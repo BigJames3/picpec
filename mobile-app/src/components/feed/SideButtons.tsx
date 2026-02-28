@@ -1,10 +1,9 @@
 /**
  * SideButtons — Colonne droite TikTok
- * Avatar 52px + Follow, Like, Commentaires, Partager, Options
+ * Avatar 52px + Follow, Like, Commentaires, Partager, Mute
  * Icônes Ionicons, animation spring sur Like
- * PERF: props primitives pour éviter re-render quand post change
  */
-import React, { useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -14,7 +13,6 @@ import {
   Animated,
   Image,
 } from 'react-native';
-import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../store/auth.store';
@@ -34,43 +32,34 @@ interface SideButtonsProps {
   onLike: () => void;
   onFollow: () => void;
   followLoading?: boolean;
+  isMuted?: boolean;
+  onMuteToggle?: () => void;
 }
 
-function FollowButton({
+function FollowBadge({
   isFollowing,
   onFollow,
   followLoading,
+  show,
 }: {
   isFollowing: boolean;
   onFollow: () => void;
   followLoading: boolean;
+  show: boolean;
 }) {
-  const spin = useRef(new Animated.Value(0)).current;
-
-  const handlePress = useCallback(() => {
-    if (followLoading) return;
-    spin.setValue(0);
-    Animated.timing(spin, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => onFollow());
-  }, [onFollow, followLoading, spin]);
-
-  const rotate = spin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
+  if (!show) return null;
   return (
     <TouchableOpacity
-      style={[styles.followBtn, isFollowing && styles.followBtnActive]}
-      onPress={handlePress}
+      style={[styles.followBadge, isFollowing && styles.followBadgeActive]}
+      onPress={onFollow}
       disabled={followLoading}
+      activeOpacity={0.8}
     >
-      <Animated.Text style={[styles.followBtnText, { transform: [{ rotate }] }]}>
-        {isFollowing ? '✓' : '+'}
-      </Animated.Text>
+      <Ionicons
+        name={isFollowing ? 'checkmark' : 'add'}
+        size={12}
+        color="#fff"
+      />
     </TouchableOpacity>
   );
 }
@@ -85,29 +74,6 @@ function LikeButton({
   onLike: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
-  const countTranslateY = useRef(new Animated.Value(0)).current;
-  const countOpacity = useRef(new Animated.Value(1)).current;
-  const prevLiked = useRef(isLiked);
-
-  useEffect(() => {
-    if (isLiked && !prevLiked.current) {
-      countTranslateY.setValue(10);
-      countOpacity.setValue(0);
-      Animated.parallel([
-        Animated.timing(countTranslateY, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(countOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-    prevLiked.current = isLiked;
-  }, [isLiked, countTranslateY, countOpacity]);
 
   const handlePress = useCallback(() => {
     Animated.sequence([
@@ -126,25 +92,16 @@ function LikeButton({
   }, [onLike, scale]);
 
   return (
-    <View style={styles.action}>
-      <TouchableOpacity onPress={handlePress} activeOpacity={0.8}>
-        <Animated.View style={{ transform: [{ scale }] }}>
-          <Ionicons
-            name={isLiked ? 'heart' : 'heart-outline'}
-            size={36}
-            color={isLiked ? '#FF2D55' : '#fff'}
-          />
-        </Animated.View>
-      </TouchableOpacity>
-      <Animated.View
-        style={{
-          transform: [{ translateY: countTranslateY }],
-          opacity: countOpacity,
-        }}
-      >
-        <RNText style={styles.actionLabel}>{formatCount(likeCount)}</RNText>
+    <TouchableOpacity style={styles.actionBtn} onPress={handlePress} activeOpacity={0.8}>
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Ionicons
+          name={isLiked ? 'heart' : 'heart-outline'}
+          size={34}
+          color={isLiked ? '#ff2d55' : '#fff'}
+        />
       </Animated.View>
-    </View>
+      <RNText style={styles.actionCount}>{formatCount(likeCount)}</RNText>
+    </TouchableOpacity>
   );
 }
 
@@ -161,6 +118,8 @@ export const SideButtons = React.memo(function SideButtons({
   onLike,
   onFollow,
   followLoading = false,
+  isMuted = false,
+  onMuteToggle,
 }: SideButtonsProps) {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const [sharesCount, setSharesCount] = React.useState(initialSharesCount ?? 0);
@@ -195,53 +154,51 @@ export const SideButtons = React.memo(function SideButtons({
     router.push(`/posts/${postId}/comments` as never);
   }, [postId]);
 
-  const handleOptions = useCallback(() => {
-    if (__DEV__) console.log('[SideButtons] Options:', postId);
-  }, [postId]);
-
   return (
     <View style={styles.container}>
-      {/* Avatar 52px + bordure blanche 2px + bouton Follow rond rouge 22px */}
-      <View style={styles.avatarSection}>
-        <View style={styles.avatar}>
-          {authorAvatar ? (
-            <Image source={{ uri: authorAvatar }} style={styles.avatarImage} />
-          ) : (
-            <Text style={styles.avatarText}>{initials}</Text>
-          )}
-        </View>
-        {currentUserId && authorId !== currentUserId && (
-          <FollowButton
-            isFollowing={isFollowing}
-            onFollow={onFollow}
-            followLoading={followLoading}
-          />
-        )}
+      {/* 1. Avatar */}
+      <View style={styles.avatarWrapper}>
+        <Image
+          source={{
+            uri:
+              (authorAvatar && authorAvatar.trim()) ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&background=E85D04&color=fff`,
+          }}
+          style={styles.avatar}
+        />
+        <FollowBadge
+          show={!!(currentUserId && authorId !== currentUserId)}
+          isFollowing={isFollowing}
+          onFollow={onFollow}
+          followLoading={followLoading}
+        />
       </View>
 
-      {/* Like */}
+      {/* 2. Like */}
       <LikeButton isLiked={isLiked} likeCount={likeCount} onLike={onLike} />
 
-      {/* Commentaires */}
-      <View style={styles.action}>
-        <TouchableOpacity onPress={handleComments} activeOpacity={0.8}>
-          <Ionicons name="chatbubble-ellipses-outline" size={36} color="#fff" />
-        </TouchableOpacity>
-        <RNText style={styles.actionLabel}>{formatCount(commentsCount)}</RNText>
-      </View>
-
-      {/* Partager + compteur */}
-      <View style={styles.action}>
-        <TouchableOpacity onPress={handleShare} activeOpacity={0.8}>
-          <Ionicons name="paper-plane-outline" size={36} color="#fff" />
-        </TouchableOpacity>
-        <RNText style={styles.actionLabel}>{formatCount(sharesCount)}</RNText>
-      </View>
-
-      {/* Options */}
-      <TouchableOpacity style={styles.action} onPress={handleOptions} activeOpacity={0.8}>
-        <Ionicons name="ellipsis-horizontal" size={36} color="#fff" />
+      {/* 3. Commentaires */}
+      <TouchableOpacity style={styles.actionBtn} onPress={handleComments} activeOpacity={0.8}>
+        <Ionicons name="chatbubble-ellipses-outline" size={32} color="#fff" />
+        <RNText style={styles.actionCount}>{formatCount(commentsCount)}</RNText>
       </TouchableOpacity>
+
+      {/* 4. Partager */}
+      <TouchableOpacity style={styles.actionBtn} onPress={handleShare} activeOpacity={0.8}>
+        <Ionicons name="arrow-redo-outline" size={32} color="#fff" />
+        <RNText style={styles.actionCount}>Partager</RNText>
+      </TouchableOpacity>
+
+      {/* 5. Mute */}
+      {onMuteToggle && (
+        <TouchableOpacity style={styles.actionBtn} onPress={onMuteToggle} activeOpacity={0.8}>
+          <Ionicons
+            name={isMuted ? 'volume-mute' : 'volume-high'}
+            size={28}
+            color="#fff"
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 });
@@ -249,55 +206,51 @@ export const SideButtons = React.memo(function SideButtons({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    right: 10,
-    bottom: 90,
+    right: 12,
+    bottom: 100,
     alignItems: 'center',
     gap: 20,
+    zIndex: 20,
+    elevation: 20,
   },
-  avatarSection: {
-    alignItems: 'center',
-    marginBottom: 4,
+  avatarWrapper: {
+    position: 'relative',
+    marginBottom: 8,
   },
   avatar: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#E85D04',
-    justifyContent: 'center',
-    alignItems: 'center',
     borderWidth: 2,
     borderColor: '#fff',
-    overflow: 'hidden',
   },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  followBtn: {
-    marginTop: 4,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#FF2D55',
-    justifyContent: 'center',
+  followBadge: {
+    position: 'absolute',
+    bottom: -8,
+    left: '50%',
+    transform: [{ translateX: -10 }],
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#E85D04',
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#000',
   },
-  followBtnActive: {
+  followBadgeActive: {
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
-  followBtnText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+  actionBtn: {
+    alignItems: 'center',
+    gap: 4,
   },
-  action: { alignItems: 'center', gap: 4 },
-  actionLabel: {
+  actionCount: {
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
-    textShadowColor: 'rgba(0,0,0,0.9)',
-    textShadowOffset: { width: 1, height: 1 },
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
 });
